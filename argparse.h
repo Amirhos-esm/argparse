@@ -15,6 +15,8 @@ extern "C" {
 
 #include <stdint.h>
 
+#define STREAM_BUFFER 1024
+
 struct argparse;
 struct argparse_option;
 
@@ -125,6 +127,10 @@ void argparse_describe(struct argparse *self, const char *description,
                        const char *epilog);
 int argparse_parse(struct argparse *self, int argc, const char **argv);
 void argparse_usage(struct argparse *self);
+
+void argparse_bufferReset();
+char * argparse_getBuffer();
+int argparse_bufferAvailable();
 
 #ifdef __cplusplus
 }
