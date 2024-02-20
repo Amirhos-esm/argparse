@@ -11,10 +11,58 @@
 #include <assert.h>
 #include <errno.h>
 #include "argparse.h"
+#include <stdarg.h>
 
 #define OPT_UNSET 1
 #define OPT_LONG  (1 << 1)
 
+
+char streamBuffer[STREAM_BUFFER];
+int streamBufferIndex=0;
+void argparse_append(FILE *__stream, char *buffer) {
+    // Check if the stream buffer index is within bounds
+    if (streamBufferIndex + strlen(buffer) < sizeof(streamBuffer)) {
+        // Append the buffer to the stream buffer
+        strcpy(streamBuffer + streamBufferIndex, buffer);
+        // Update the stream buffer index
+        streamBufferIndex += strlen(buffer);
+        // Optionally, write the buffer to the provided stream
+//        if (__stream != NULL) {
+//            fprintf(__stream, "%s", buffer);
+//        }
+    } else {
+        // Handle buffer overflow error
+//        fprintf(stderr, "Error: Stream buffer overflow.\n");
+    }
+}
+void argparse_bufferReset(){
+    streamBufferIndex = 0;
+}
+char * argparse_getBuffer(){
+    return streamBuffer;
+}
+int argparse_bufferAvailable(){
+    return streamBufferIndex;
+}
+
+void __FPUTC(char c ,FILE *stream){
+    char buffer[12];
+    snprintf(buffer,sizeof(buffer),"%c",c);
+    argparse_append(stream,buffer);
+
+}
+size_t __FPRINTF(FILE *stream, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    char buffer[128];
+    size_t ret =vsnprintf(buffer, sizeof(buffer), format, args);
+
+    va_end(args);
+
+    argparse_append(stream,buffer);
+    return  ret;
+}
 static const char *
 prefix_skip(const char *str, const char *prefix)
 {
@@ -39,11 +87,11 @@ argparse_error(struct argparse *self, const struct argparse_option *opt,
 {
     (void)self;
     if (flags & OPT_LONG) {
-        fprintf(stderr, "error: option `--%s` %s\n", opt->long_name, reason);
+        __FPRINTF(stderr, "error: option `--%s` %s\n", opt->long_name, reason);
     } else {
-        fprintf(stderr, "error: option `-%c` %s\n", opt->short_name, reason);
+        __FPRINTF(stderr, "error: option `-%c` %s\n", opt->short_name, reason);
     }
-    exit(EXIT_FAILURE);
+    //exit(EXIT_FAILURE);
 }
 
 static int
@@ -139,7 +187,7 @@ argparse_options_check(const struct argparse_option *options)
             case ARGPARSE_OPT_GROUP:
                 continue;
             default:
-                fprintf(stderr, "wrong option type: %d", options->type);
+                __FPRINTF(stderr, "wrong option type: %d", options->type);
                 break;
         }
     }
@@ -271,10 +319,10 @@ argparse_parse(struct argparse *self, int argc, const char **argv)
         continue;
 
 unknown:
-        fprintf(stderr, "error: unknown option `%s`\n", self->argv[0]);
+        __FPRINTF(stderr, "error: unknown option `%s`\n", self->argv[0]);
         argparse_usage(self);
         if (!(self->flags & ARGPARSE_IGNORE_UNKNOWN_ARGS)) {
-            exit(EXIT_FAILURE);
+            //exit(EXIT_FAILURE);
         }
     }
 
@@ -290,18 +338,18 @@ void
 argparse_usage(struct argparse *self)
 {
     if (self->usages) {
-        fprintf(stdout, "Usage: %s\n", *self->usages++);
+        __FPRINTF(stdout, "Usage: %s\n", *self->usages++);
         while (*self->usages && **self->usages)
-            fprintf(stdout, "   or: %s\n", *self->usages++);
+            __FPRINTF(stdout, "   or: %s\n", *self->usages++);
     } else {
-        fprintf(stdout, "Usage:\n");
+        __FPRINTF(stdout, "Usage:\n");
     }
 
     // print description
     if (self->description)
-        fprintf(stdout, "%s\n", self->description);
+        __FPRINTF(stdout, "%s\n", self->description);
 
-    fputc('\n', stdout);
+    __FPUTC('\n', stdout);
 
     const struct argparse_option *options;
 
@@ -340,40 +388,40 @@ argparse_usage(struct argparse *self)
         size_t pos = 0;
         size_t pad = 0;
         if (options->type == ARGPARSE_OPT_GROUP) {
-            fputc('\n', stdout);
-            fprintf(stdout, "%s", options->help);
-            fputc('\n', stdout);
+            __FPUTC('\n', stdout);
+            __FPRINTF(stdout, "%s", options->help);
+            __FPUTC('\n', stdout);
             continue;
         }
-        pos = fprintf(stdout, "    ");
+        pos = __FPRINTF(stdout, "    ");
         if (options->short_name) {
-            pos += fprintf(stdout, "-%c", options->short_name);
+            pos += __FPRINTF(stdout, "-%c", options->short_name);
         }
         if (options->long_name && options->short_name) {
-            pos += fprintf(stdout, ", ");
+            pos += __FPRINTF(stdout, ", ");
         }
         if (options->long_name) {
-            pos += fprintf(stdout, "--%s", options->long_name);
+            pos += __FPRINTF(stdout, "--%s", options->long_name);
         }
         if (options->type == ARGPARSE_OPT_INTEGER) {
-            pos += fprintf(stdout, "=<int>");
+            pos += __FPRINTF(stdout, "=<int>");
         } else if (options->type == ARGPARSE_OPT_FLOAT) {
-            pos += fprintf(stdout, "=<flt>");
+            pos += __FPRINTF(stdout, "=<flt>");
         } else if (options->type == ARGPARSE_OPT_STRING) {
-            pos += fprintf(stdout, "=<str>");
+            pos += __FPRINTF(stdout, "=<str>");
         }
         if (pos <= usage_opts_width) {
             pad = usage_opts_width - pos;
         } else {
-            fputc('\n', stdout);
+            __FPUTC('\n', stdout);
             pad = usage_opts_width;
         }
-        fprintf(stdout, "%*s%s\n", (int)pad + 2, "", options->help);
+        __FPRINTF(stdout, "%*s%s\n", (int)pad + 2, "", options->help);
     }
 
     // print epilog
     if (self->epilog)
-        fprintf(stdout, "%s\n", self->epilog);
+        __FPRINTF(stdout, "%s\n", self->epilog);
 }
 
 int
@@ -389,6 +437,6 @@ int
 argparse_help_cb(struct argparse *self, const struct argparse_option *option)
 {
     argparse_help_cb_no_exit(self, option);
-    exit(EXIT_SUCCESS);
+    //exit(EXIT_SUCCESS);
 }
 
